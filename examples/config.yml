@@ -8,5 +8,5 @@ registry:
     api_key: aaaabff
 
   server:
-    type: udp
+    type: tcp
     port: 2006

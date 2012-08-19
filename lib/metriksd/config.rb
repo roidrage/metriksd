@@ -1,5 +1,6 @@
 require 'metriksd/registry'
 require 'metriksd/udp_server'
+require 'metriksd/tcp_server'
 require 'metriksd/librato_metrics_reporter'
 
 module Metriksd
@@ -78,6 +79,8 @@ module Metriksd
       case type.to_s
       when 'udp'
         Metriksd::UdpServer
+      when 'tcp'
+        Metriksd::TcpServer
       when '', nil
         raise "No server 'type' was specified"
       else
