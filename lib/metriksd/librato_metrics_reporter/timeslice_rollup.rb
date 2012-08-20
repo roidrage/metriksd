@@ -140,5 +140,22 @@ module Metriksd
       @gauges[key] ||= SumGauge.new(name, source)
       @gauges[key].mark(value)
     end
+
+    def counter(name, time, source, value)
+      time = rounded_time(time)
+
+      @counters << {
+        :name   => name,
+        :time   => time,
+        :source => source,
+        :value  => value
+      }
+    end
+
+    def rounded_time(time)
+      time = time.to_i
+      time -= time % @interval
+      time
+    end
   end
 end
