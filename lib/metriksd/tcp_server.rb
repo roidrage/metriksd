@@ -5,58 +5,74 @@ require 'celluloid/io'
 
 module Metriksd
   class TcpServer
-    include Celluloid::IO
+    class Server
+      include Celluloid::IO
 
-    attr_reader :logger, :port, :host, :registry
+      attr_reader :logger, :port, :host, :registry
 
-    def initialize(registry, options = {})
-      missing_keys = %w(port) - options.keys.map(&:to_s)
-      unless missing_keys.empty?
-        raise ArgumentError, "Missing required options: #{missing_keys * ', '}"
+      def initialize(registry, options = {})
+        missing_keys = %w(port) - options.keys.map(&:to_s)
+        unless missing_keys.empty?
+          raise ArgumentError, "Missing required options: #{missing_keys * ', '}"
+        end
+
+        @registry = registry
+        @port     = options[:port]
+        @host     = options[:host]    || '0.0.0.0'
+        @logger   = options[:logger]  || ::Logger.new(STDERR)
+
+        @unpacker = MessagePack::Unpacker.new
+        @server = TCPServer.new(@host, @port)
+        run!
       end
 
-      @registry = registry
-      @port     = options[:port]
-      @host     = options[:host]    || '0.0.0.0'
-      @logger   = options[:logger]  || ::Logger.new(STDERR)
+      def stop
+        @server.close if @server
+      end
 
-      @unpacker = MessagePack::Unpacker.new
-    end
-    
-    def start
-      @server ||= TCPServer.new(@host, @port)
-      run!
-    end
+      def finalize
+        stop  
+      end
 
-    def stop
-      @server.close if @server
-    end
+      def run
+        loop do
+          begin
+            handle_connection! @server.accept
+          rescue IOError
+            logger.warn "Server died with an error."
+          end
+        end
+      end
 
-    def finalize
-      stop
-    end
+      def handle_connection(connection)
+        loop do
+          data = connection.readpartial(512)
+          unmarshal(data)
+        end
+      end
 
-    def run
-      loop do
-        begin
-          handle_connection! @server.accept
-        rescue IOError
-          logger.warn "Server died with an error."
+      def unmarshal(data)
+        @unpacker.feed_each(data) do |payload|
+          @registry << Data.new(payload)
         end
       end
     end
 
-    def handle_connection(connection)
-      loop do
-        data = connection.readpartial(512)
-        unmarshal(data)
-      end
+    attr_reader :server, :registry
+
+    def initialize(registry, options = {})
+      @registry, @options = registry, options
     end
 
-    def unmarshal(data)
-      @unpacker.feed_each(data) do |payload|
-        @registry << Data.new(payload)
-      end
+    def start
+      @server = Server.supervise(@registry, @options)
+    end
+
+    def stop
+      @server.terminate
+    end
+
+    def join
     end
   end
 end
